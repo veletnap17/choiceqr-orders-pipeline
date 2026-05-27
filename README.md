@@ -94,3 +94,21 @@ choiceqr-orders-pipeline/
 ## Author
 
 Ruslan Panteleev
+
+---
+
+## BigQuery Tables
+
+### Raw Orders Table
+
+![Raw Orders](screenshots/orders_all_raw.png)
+
+### Deduplicated Orders Table
+
+![Deduplicated Orders](screenshots/orders_all_dedup.png)
+
+---
+
+## Cloud Run Deployment
+
+![Cloud Run](screenshots/cloud_run.png)

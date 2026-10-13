@@ -64,6 +64,7 @@ sql/
   daily_metrics.sql
   deduplicate_orders.sql
   first_time_customers.sql
+  data_quality_checks.sql
 screenshots/
   orders_all_raw.png
   orders_all_dedup.png
@@ -74,9 +75,12 @@ screenshots/
 
 - Daily orders, revenue and cancelled orders by restaurant
 - First order date by customer phone number
-- Deduplication with BigQuery `MERGE`
+- Deduplication with BigQuery `MERGE` on composite `(restaurant, _id)` keys
+- Post-merge assertions for duplicate and null keys
 
-**Note:** SQL scripts use `project_id` placeholders; replace them and validate schemas before execution. The example `MERGE` and its deduplication key need review before production use.
+**Important:** SQL scripts use `project_id` placeholders. The example `MERGE` assumes the raw table contains `_id`, `restaurant`, `status`, `orderLocalTime`, `total`, `timestamps_created`, and `loaded_at`, and the destination supports inserts into those five specified columns. It keeps the latest available version of each `(restaurant, _id)` pair according to `timestamps_created` and ingestion time. Verify actual schema, types, target constraints, and source identifier semantics before execution. The merge is not currently invoked by `main.py`.
+
+Run `sql/data_quality_checks.sql` after the merge to assert there are no duplicate `(restaurant, _id)` keys or null identifiers in the target. This SQL is for BigQuery, and needs a configured dataset and credentials. Those assertions do not prove correct business values or full source-to-target completeness.
 
 ## Screenshots
 
@@ -95,8 +99,8 @@ screenshots/
 ## Improvements planned
 
 - Robust HTTP error handling and bounded 429 retries
-- More reliable cross-location deduplication and schema checks
-- Automated tests and data quality checks
+- Validate source identifiers and target schema against a real BigQuery dataset
+- Add additional data quality checks for freshness, reconciliation and business metrics
 - Scheduling, orchestration, monitoring and CI/CD
 
 ## Author

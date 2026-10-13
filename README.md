@@ -1,114 +1,104 @@
 # ChoiceQR Orders Pipeline
 
-Automated restaurant analytics ETL pipeline built with Python, Google Cloud, BigQuery, and Looker Studio.
+Portfolio version of a restaurant orders ingestion pipeline built with Python, the ChoiceQR REST API, and Google BigQuery.
 
 ## Overview
 
-This project extracts restaurant order data from the ChoiceQR API, processes and stores it in BigQuery, and prepares analytical tables for BI dashboards and operational reporting.
+The Python script retrieves archived orders for three configured restaurant locations, handles pagination and basic rate limits, normalizes the API responses, and appends records to a BigQuery raw table. Separate SQL examples demonstrate deduplication and reporting for business analytics.
 
-The pipeline is designed to support multiple restaurant locations and automated daily data loading.
+> **Scope:** `main.py` implements API-to-BigQuery raw ingestion. The SQL scripts are not invoked automatically by the Python script. Deployment and scheduling configuration are not included in this portfolio repository.
 
----
+## Technologies
 
-## Tech Stack
-
-- Python
-- Google BigQuery
-- Google Cloud Run
-- SQL
-- REST API
-- Pandas
-- Looker Studio
-
----
-
-## Features
-
-- Automated API data extraction
-- Pagination handling
-- Multi-restaurant support
-- Incremental loading
-- Raw and deduplicated tables
-- BigQuery integration
-- Dashboard-ready data model
-- Rate-limit handling
-- Automated cloud execution
-
----
+Python · pandas · requests · SQL · Google BigQuery · Google Cloud Run (example screenshot)
 
 ## Architecture
 
-ChoiceQR API → Python ETL → BigQuery → Looker Studio
-
----
-
-## Main Tables
-
-| Table | Description |
-|---|---|
-| orders_all_raw | Raw data loaded directly from API |
-| orders_all_dedup | Clean deduplicated analytical table |
-
----
-
-## Example Metrics
-
-- Orders
-- Revenue
-- First-time customers
-- Cancelled orders
-- Delivery time
-- Restaurant performance
-- Customer retention
-
----
-
-## Project Structure
-
 ```text
-choiceqr-orders-pipeline/
-│
-├── main.py
-├── requirements.txt
-├── README.md
-│
-├── sql/
-├── docs/
-└── screenshots/
-
+ChoiceQR REST API (3 locations)
+             |
+       Python / main.py
+             |
+     BigQuery raw orders
+             |
+  SQL transformations (separate)
+             |
+ Deduplicated and analytical data
 ```
 
----
+## Setup
 
-## Future Improvements
+Requires Python 3.10+, an accessible ChoiceQR API account, a Google Cloud project and BigQuery permissions.
 
-- Docker support
-- CI/CD pipeline
-- Automated scheduling
-- Monitoring and alerting
-- Data quality checks
-- dbt transformations
+```bash
+python -m pip install -r requirements.txt
+```
 
----
+Set the following environment variables (do not commit real tokens):
+
+| Variable | Description |
+| --- | --- |
+| `PROJECT_ID` | Google Cloud project ID (required) |
+| `DATASET` | BigQuery dataset, default `Data_total` |
+| `TOKEN_VINOHRADY` | ChoiceQR token for Vinohrady |
+| `TOKEN_ZIZKOV` | ChoiceQR token for Zizkov |
+| `TOKEN_CHODOV` | ChoiceQR token for Chodov |
+| `RAW_TABLE` | BigQuery raw table, default `orders_all_raw` |
+| `MAX_PAGES`, `PER_PAGE`, `SLEEP_SECONDS` | Optional API pagination and pacing settings |
+
+Authenticate to Google Cloud using Application Default Credentials, then run:
+
+```bash
+python main.py
+```
+
+The script loads a rolling two-day date range. It requires real API credentials and access to the target BigQuery dataset, so this repository is not directly runnable without configuration.
+
+## Files
+
+```text
+main.py
+config.example.py
+requirements.txt
+sql/
+  daily_metrics.sql
+  deduplicate_orders.sql
+  first_time_customers.sql
+screenshots/
+  orders_all_raw.png
+  orders_all_dedup.png
+  cloud_run.png
+```
+
+## Analytics examples
+
+- Daily orders, revenue and cancelled orders by restaurant
+- First order date by customer phone number
+- Deduplication with BigQuery `MERGE`
+
+**Note:** SQL scripts use `project_id` placeholders; replace them and validate schemas before execution. The example `MERGE` and its deduplication key need review before production use.
+
+## Screenshots
+
+**BigQuery raw orders**
+
+![Raw orders](screenshots/orders_all_raw.png)
+
+**BigQuery deduplicated orders**
+
+![Deduplicated orders](screenshots/orders_all_dedup.png)
+
+**Cloud Run deployment**
+
+![Cloud Run](screenshots/cloud_run.png)
+
+## Improvements planned
+
+- Robust HTTP error handling and bounded 429 retries
+- More reliable cross-location deduplication and schema checks
+- Automated tests and data quality checks
+- Scheduling, orchestration, monitoring and CI/CD
 
 ## Author
 
 Ruslan Panteleev
-
----
-
-## BigQuery Tables
-
-### Raw Orders Table
-
-![Raw Orders](screenshots/orders_all_raw.png)
-
-### Deduplicated Orders Table
-
-![Deduplicated Orders](screenshots/orders_all_dedup.png)
-
----
-
-## Cloud Run Deployment
-
-![Cloud Run](screenshots/cloud_run.png)

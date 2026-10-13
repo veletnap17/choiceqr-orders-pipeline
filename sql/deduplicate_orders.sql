@@ -1,25 +1,33 @@
-MERGE `project_id.Data_total.orders_all_dedup` T
+-- Portfolio example: maintain one analytical row per (restaurant, _id).
+-- Replace project_id with your Google Cloud project and verify table schemas.
+-- This MERGE intentionally maintains only the columns listed below.
+-- Other target columns (if any) must be nullable or have defaults.
+MERGE `project_id.Data_total.orders_all_dedup` AS T
 USING (
-  SELECT *
-  FROM (
-    SELECT *,
-           ROW_NUMBER() OVER (
-             PARTITION BY _id
-             ORDER BY timestamps_created DESC
-           ) AS rn
-    FROM `project_id.Data_total.orders_all_raw`
-    WHERE _id IS NOT NULL
-  )
-  WHERE rn = 1
-) S
-ON T._id = S._id
+  SELECT
+    _id,
+    restaurant,
+    status,
+    orderLocalTime,
+    total
+  FROM `project_id.Data_total.orders_all_raw` AS R
+  WHERE _id IS NOT NULL
+    AND restaurant IS NOT NULL
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY restaurant, _id
+    ORDER BY
+      SAFE_CAST(timestamps_created AS TIMESTAMP) DESC,
+      SAFE_CAST(loaded_at AS TIMESTAMP) DESC,
+      TO_JSON_STRING(R) DESC
+  ) = 1
+) AS S
+ON T.restaurant = S.restaurant AND T._id = S._id
 
-WHEN MATCHED THEN
-UPDATE SET
-  T.status = S.status,
-  T.orderLocalTime = S.orderLocalTime,
-  T.total = S.total,
-  T.restaurant = S.restaurant
+WHEN MATCHED THEN UPDATE SET
+  status = S.status,
+  orderLocalTime = S.orderLocalTime,
+  total = S.total
 
 WHEN NOT MATCHED THEN
-INSERT ROW
+  INSERT (_id, restaurant, status, orderLocalTime, total)
+  VALUES (S._id, S.restaurant, S.status, S.orderLocalTime, S.total);

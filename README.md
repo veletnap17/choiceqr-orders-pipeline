@@ -65,6 +65,7 @@ sql/
   deduplicate_orders.sql
   first_time_customers.sql
   data_quality_checks.sql
+  tests/synthetic_bigquery_regression.sql
 screenshots/
   orders_all_raw.png
   orders_all_dedup.png
@@ -82,6 +83,20 @@ screenshots/
 
 Run `sql/data_quality_checks.sql` after the merge to assert there are no duplicate `(restaurant, _id)` keys or null identifiers in the target. This SQL is for BigQuery, and needs a configured dataset and credentials. Those assertions do not prove correct business values or full source-to-target completeness.
 
+## Synthetic SQL regression demo
+
+Run [`sql/tests/synthetic_bigquery_regression.sql`](sql/tests/synthetic_bigquery_regression.sql) as a **single BigQuery Standard SQL script** to demonstrate:
+
+- Keeping the latest version of a duplicate order
+- Preserving the same order ID at a different restaurant
+- Rejecting source rows with null business keys
+- Idempotency when the same merge is repeated
+- Daily revenue, order counts and cancellation metrics
+
+The script uses temporary tables and **synthetic data only**. No customer data or production dataset access is needed, but a Google Cloud project with permission to execute BigQuery queries is required. The assertions fail with an error if expected outputs differ.
+
+**Limitations:** This is a self-contained demonstration that repeats the production-style transformation rules; it does not automatically import or execute `sql/deduplicate_orders.sql` or `sql/daily_metrics.sql`. SQL assertions have not been run in a live BigQuery environment via this repository. The GitHub Actions workflow currently tests Python only.
+
 ## Screenshots
 
 **BigQuery raw orders**
@@ -98,9 +113,9 @@ Run `sql/data_quality_checks.sql` after the merge to assert there are no duplica
 
 ## Improvements planned
 
-- Robust HTTP error handling and bounded 429 retries
 - Validate source identifiers and target schema against a real BigQuery dataset
 - Add additional data quality checks for freshness, reconciliation and business metrics
+- Automate BigQuery SQL validation and synchronize demo transformations with the main SQL files
 - Scheduling, orchestration, monitoring and CI/CD
 
 ## Author

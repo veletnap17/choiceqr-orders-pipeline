@@ -1,123 +1,135 @@
 # ChoiceQR Orders Pipeline
 
-Portfolio version of a restaurant orders ingestion pipeline built with Python, the ChoiceQR REST API, and Google BigQuery.
+**Python + BigQuery restaurant-order ingestion, SQL deduplication, and analytics quality checks**
 
-## Overview
+[![Python checks](https://github.com/veletnap17/choiceqr-orders-pipeline/actions/workflows/python-checks.yml/badge.svg)](https://github.com/veletnap17/choiceqr-orders-pipeline/actions/workflows/python-checks.yml)
 
-The Python script retrieves archived orders for three configured restaurant locations, handles pagination and basic rate limits, normalizes the API responses, and appends records to a BigQuery raw table. Separate SQL examples demonstrate deduplication and reporting for business analytics.
+A portfolio adaptation of a restaurant analytics integration. It demonstrates how order data can move from a paginated REST API into BigQuery, then become usable for reporting and decision-making across multiple restaurant locations.
 
-> **Scope:** `main.py` implements API-to-BigQuery raw ingestion. The SQL scripts are not invoked automatically by the Python script. Deployment and scheduling configuration are not included in this portfolio repository.
+## Business problem
 
-## Technologies
+Restaurant operations and marketing analysis depend on consistent order data: revenue trends, cancellations, first-time buyers, and location-level performance. API data may arrive in multiple pages, be re-fetched in overlapping windows, or contain later updates to existing orders. A useful analytics pipeline needs to ingest that data reliably and define how duplicates are handled before reporting.
 
-Python · pandas · requests · SQL · Google BigQuery · Google Cloud Run (example screenshot)
+## What this repository demonstrates
+
+- **API ingestion:** retrieves archived orders from the ChoiceQR API for three configured locations
+- **Incremental extraction:** fetches a rolling two-day window to capture recent orders and updates
+- **Resilience:** handles pagination, HTTP errors, and bounded retries for HTTP 429 responses
+- **Cloud data loading:** flattens JSON with pandas and appends records to a BigQuery raw table
+- **SQL transformations:** example BigQuery `MERGE` using `(restaurant, _id)` as the deduplication key
+- **Analytics:** sample daily order, revenue, cancellation, and first-order queries
+- **Verification:** Python unit tests, GitHub Actions checks, and a synthetic BigQuery SQL regression script
 
 ## Architecture
 
 ```text
-ChoiceQR REST API (3 locations)
-             |
-       Python / main.py
-             |
-     BigQuery raw orders
-             |
-  SQL transformations (separate)
-             |
- Deduplicated and analytical data
+             ChoiceQR REST API
+             3 restaurant locations
+                      |
+              Python (main.py)
+          pagination / retries / JSON
+                      |
+             BigQuery raw orders
+                 WRITE_APPEND
+                      |
+               BigQuery SQL
+          deduplication + QA checks
+                      |
+           Analytical query examples
+        revenue / orders / cancellations
 ```
 
-## Setup
+**Repository scope:** `main.py` currently loads **raw data only**. BigQuery SQL scripts are separate examples; this repository does **not** automatically orchestrate them. The screenshots illustrate a Cloud Run deployment, but deployment and scheduling configuration are not included. This public copy contains no production credentials.
 
-Requires Python 3.10+, an accessible ChoiceQR API account, a Google Cloud project and BigQuery permissions.
+## Technology
 
-```bash
-python -m pip install -r requirements.txt
-```
+Python 3.10+ · requests · pandas · Google BigQuery · Standard SQL · GitHub Actions
 
-Set the following environment variables (do not commit real tokens):
+## Quick start
 
-| Variable | Description |
+1. Install dependencies:
+
+   ```bash
+   python -m pip install -r requirements.txt
+   ```
+
+2. Configure Google Cloud Application Default Credentials with BigQuery permissions and set environment variables:
+
+   | Environment variable | Use |
+   | --- | --- |
+   | `PROJECT_ID` | Required GCP project |
+   | `TOKEN_VINOHRADY`, `TOKEN_ZIZKOV`, `TOKEN_CHODOV` | ChoiceQR API tokens for each location |
+   | `DATASET` | BigQuery dataset (default `Data_total`) |
+   | `RAW_TABLE` | Raw destination table (default `orders_all_raw`) |
+   | `MAX_PAGES`, `PER_PAGE`, `SLEEP_SECONDS`, `MAX_RETRIES` | Optional request settings |
+
+3. Run ingestion:
+
+   ```bash
+   python main.py
+   ```
+
+No API tokens or GCP credentials are provided. The pipeline requires access to a ChoiceQR account and your own BigQuery project/dataset.
+
+## Repository map
+
+| File | Purpose |
 | --- | --- |
-| `PROJECT_ID` | Google Cloud project ID (required) |
-| `DATASET` | BigQuery dataset, default `Data_total` |
-| `TOKEN_VINOHRADY` | ChoiceQR token for Vinohrady |
-| `TOKEN_ZIZKOV` | ChoiceQR token for Zizkov |
-| `TOKEN_CHODOV` | ChoiceQR token for Chodov |
-| `RAW_TABLE` | BigQuery raw table, default `orders_all_raw` |
-| `MAX_PAGES`, `PER_PAGE`, `SLEEP_SECONDS` | Optional API pagination and pacing settings |
+| [`main.py`](main.py) | API extraction and append-only BigQuery loading |
+| [`tests/test_main.py`](tests/test_main.py) | HTTP and pagination unit tests |
+| [`sql/deduplicate_orders.sql`](sql/deduplicate_orders.sql) | Example composite-key BigQuery `MERGE` |
+| [`sql/daily_metrics.sql`](sql/daily_metrics.sql) | Daily revenue, orders, and cancellations |
+| [`sql/first_time_customers.sql`](sql/first_time_customers.sql) | First order date by customer phone |
+| [`sql/data_quality_checks.sql`](sql/data_quality_checks.sql) | Post-merge duplicate/null-key assertions |
+| [`sql/tests/synthetic_bigquery_regression.sql`](sql/tests/synthetic_bigquery_regression.sql) | Independent regression demo with temporary tables |
+| [`.github/workflows/python-checks.yml`](.github/workflows/python-checks.yml) | Python test workflow |
 
-Authenticate to Google Cloud using Application Default Credentials, then run:
+## Test the project
+
+**Python unit tests (no live API calls):**
 
 ```bash
-python main.py
+python -m unittest discover -s tests -v
 ```
 
-The script loads a rolling two-day date range. It requires real API credentials and access to the target BigQuery dataset, so this repository is not directly runnable without configuration.
+The [GitHub Actions workflow](.github/workflows/python-checks.yml) runs these checks on pull requests and pushes to `main`.
 
-## Files
+**BigQuery SQL regression demo:** paste the complete contents of [`sql/tests/synthetic_bigquery_regression.sql`](sql/tests/synthetic_bigquery_regression.sql) into the BigQuery SQL editor and run it as one script. It creates **temporary tables with synthetic orders**, then asserts:
 
-```text
-main.py
-config.example.py
-requirements.txt
-sql/
-  daily_metrics.sql
-  deduplicate_orders.sql
-  first_time_customers.sql
-  data_quality_checks.sql
-  tests/synthetic_bigquery_regression.sql
-screenshots/
-  orders_all_raw.png
-  orders_all_dedup.png
-  cloud_run.png
-```
+- latest order updates replace older versions
+- the same order ID at different restaurants remains distinct
+- null business keys are ignored
+- repeated `MERGE` execution is idempotent for the sample
+- sample daily revenue, order counts, and cancellation counts match expectations
 
-## Analytics examples
+The regression script was **executed successfully in BigQuery by the project owner**. This validates the synthetic scenario, **not** compatibility with an arbitrary production schema. The demo repeats the transformation logic rather than importing the main SQL files; GitHub Actions does not execute BigQuery SQL.
 
-- Daily orders, revenue and cancelled orders by restaurant
-- First order date by customer phone number
-- Deduplication with BigQuery `MERGE` on composite `(restaurant, _id)` keys
-- Post-merge assertions for duplicate and null keys
+## Data model and caveats
 
-**Important:** SQL scripts use `project_id` placeholders. The example `MERGE` assumes the raw table contains `_id`, `restaurant`, `status`, `orderLocalTime`, `total`, `timestamps_created`, and `loaded_at`, and the destination supports inserts into those five specified columns. It keeps the latest available version of each `(restaurant, _id)` pair according to `timestamps_created` and ingestion time. Verify actual schema, types, target constraints, and source identifier semantics before execution. The merge is not currently invoked by `main.py`.
+The ingestion table stores raw API data with `restaurant` and `loaded_at` metadata. The deduplication example uses `(restaurant, _id)` and prefers the latest `timestamps_created` and `loaded_at`, with deterministic tie-breaking. This composite key is a **design assumption** to verify against actual ChoiceQR identifier semantics.
 
-Run `sql/data_quality_checks.sql` after the merge to assert there are no duplicate `(restaurant, _id)` keys or null identifiers in the target. This SQL is for BigQuery, and needs a configured dataset and credentials. Those assertions do not prove correct business values or full source-to-target completeness.
+SQL scripts use `project_id` placeholders; adapt table paths and verify data types, schemas, and required target columns before executing against real tables. The illustrative `MERGE` updates/inserts only five specified columns and assumes other target fields are nullable or have defaults.
 
-## Synthetic SQL regression demo
+The sample daily-metrics query sums the `total` field across all statuses (including cancellations); whether cancelled orders should contribute to **business revenue** depends on the source's accounting conventions. The first-order query uses customer phone as the identifier, which may not uniquely identify one customer.
 
-Run [`sql/tests/synthetic_bigquery_regression.sql`](sql/tests/synthetic_bigquery_regression.sql) as a **single BigQuery Standard SQL script** to demonstrate:
+## Evidence / screenshots
 
-- Keeping the latest version of a duplicate order
-- Preserving the same order ID at a different restaurant
-- Rejecting source rows with null business keys
-- Idempotency when the same merge is repeated
-- Daily revenue, order counts and cancellation metrics
+**Raw orders in BigQuery**
 
-The script uses temporary tables and **synthetic data only**. No customer data or production dataset access is needed, but a Google Cloud project with permission to execute BigQuery queries is required. The assertions fail with an error if expected outputs differ.
+![Raw orders table](screenshots/orders_all_raw.png)
 
-**Limitations:** This is a self-contained demonstration that repeats the production-style transformation rules; it does not automatically import or execute `sql/deduplicate_orders.sql` or `sql/daily_metrics.sql`. SQL assertions have not been run in a live BigQuery environment via this repository. The GitHub Actions workflow currently tests Python only.
+**Deduplicated orders in BigQuery**
 
-## Screenshots
+![Deduplicated orders table](screenshots/orders_all_dedup.png)
 
-**BigQuery raw orders**
+**Cloud Run deployment screenshot**
 
-![Raw orders](screenshots/orders_all_raw.png)
+![Cloud Run deployment](screenshots/cloud_run.png)
 
-**BigQuery deduplicated orders**
+## Future work
 
-![Deduplicated orders](screenshots/orders_all_dedup.png)
+Add reproducible cloud deployment and scheduling; automate SQL transforms and schema validation; expand monitoring, reconciliation, and freshness checks; and test business metric definitions against approved source data.
 
-**Cloud Run deployment**
+---
 
-![Cloud Run](screenshots/cloud_run.png)
-
-## Improvements planned
-
-- Validate source identifiers and target schema against a real BigQuery dataset
-- Add additional data quality checks for freshness, reconciliation and business metrics
-- Automate BigQuery SQL validation and synchronize demo transformations with the main SQL files
-- Scheduling, orchestration, monitoring and CI/CD
-
-## Author
-
-Ruslan Panteleev
+**Author:** Ruslan Panteleev
